@@ -24,6 +24,8 @@ class TestEmbedInterpolate(unittest.TestCase):
         pass
 
     def test_embed_interpolate(self):
+        t_dim = [16, 32]
+        s_dim = [384, 1150]
         sarg = ServerArgs(
                    model_path="dummy",
                    device = "npu"
@@ -61,16 +63,18 @@ class TestEmbedInterpolate(unittest.TestCase):
             norm_eps=1e-6,
             prefix="visual",
         )
-        embeddings = model.fast_pos_embed_interpolate([(16,256,256),(32,512,512)])
+        embeddings = model.fast_pos_embed_interpolate([(t, s, s) for t, s in zip(t_dim, s_dim)])
 
-        embeddings_s0 = embeddings[:256*256, :]
-        embeddings_s1 = embeddings[256*256:2*256*256, :]
+        embeddings_s0 = embeddings[ : s_dim[0] * s_dim[0], :]
+        embeddings_s1 = embeddings[s_dim[0] * s_dim[0] : 2 * s_dim[0] * s_dim[0], :]
         self.assertTrue(torch.allclose(embeddings_s0, embeddings_s1, atol=5e-3))
 
-        embeddings_l = embeddings[16*256*256:16*256*256+512*512, :]
-        embeddings_r = (embeddings_l[::4, :]).reshape(128,2,128,2,-1).permute(0,2,1,3,4).reshape(256*256, -1)
-        print((embeddings_s0[:, 0])[:12])
-        print((embeddings_r[:, 0])[:12])
+        embeddings_l = embeddings[t_dim[0] * s_dim[0] * s_dim[0] :
+                                  t_dim[0] * s_dim[0] * s_dim[0] + s_dim[1] * s_dim[1], :]
+        embeddings_r = embeddings_l.reshape(s_dim[1] // 2, s_dim[1] // 2, 2, 2,-1)
+        embeddings_r = embeddings_r.permute(0,2,1,3,4).reshape(s_dim[1], s_dim[1], -1)
+        embeddings_r = embeddings_r[::3, ::3, :].reshape(s_dim[0] // 2, 2, s_dim[0] // 2, 2,-1)
+        embeddings_r = embeddings_r.permute(0,2,1,3,4).reshape(s_dim[0] * s_dim[0], -1)
         self.assertTrue(torch.allclose(embeddings_s0, embeddings_r, atol=1e-2))
 
 
